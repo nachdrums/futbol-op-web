@@ -27,13 +27,13 @@ interface Props {
   event: Event
   isOrganizer: boolean
   userId: string
+  profileName: string
 }
 
 const MAX_MAIN_PLAYERS = 14
 const MAX_BENCH_PLAYERS = 14
 
-export default function EventDetails({ event: initialEvent, isOrganizer, userId }: Props) {
-  const [playerName, setPlayerName] = useState('')
+export default function EventDetails({ event: initialEvent, isOrganizer, userId, profileName }: Props) {
   const [loading, setLoading] = useState(false)
   const [players, setPlayers] = useState<Player[]>(initialEvent.players)
   const router = useRouter()
@@ -57,7 +57,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
   const isBenchListFull = benchPlayers.length >= MAX_BENCH_PLAYERS
 
   const handleAddPlayer = async (listType: 'main' | 'bench') => {
-    if (!playerName.trim()) return
+    if (!profileName.trim()) return
 
     setLoading(true)
 
@@ -83,18 +83,28 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
       position = isBench ? benchPlayers.length + 1 : mainPlayers.length + 1
     }
 
-    await supabase.from('players').insert({
+    const { data, error } = await supabase.from('players').insert({
       event_id: event.id,
       user_id: userId,
-      name: playerName.trim(),
+      name: profileName.trim(),
       has_paid: false,
       is_bench: isBench,
       position: position,
-    })
+    }).select().single()
 
-    setPlayerName('')
+    if (error) {
+      console.error('Error al inscribirse:', error)
+      alert('Error al inscribirse: ' + error.message)
+      setLoading(false)
+      return
+    }
+
+    // Actualización optimista - agregar el nuevo jugador al estado local
+    if (data) {
+      setPlayers(prev => [...prev, data])
+    }
+    
     setLoading(false)
-    router.refresh()
   }
 
   const handleTogglePayment = async (playerId: string, currentStatus: boolean) => {
@@ -248,19 +258,10 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
             <>
               <h2 className="font-semibold text-gray-800 mb-4">📝 Inscribirse al Evento</h2>
               
-              {/* Name Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tu nombre
-                </label>
-                <input
-                  type="text"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  placeholder="Escribe tu nombre aquí"
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900"
-                  disabled={loading}
-                />
+              {/* Profile Name Display */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">Te inscribirás como:</p>
+                <p className="font-semibold text-gray-800">{profileName}</p>
               </div>
 
           {/* Inscription Buttons */}
@@ -271,7 +272,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
             <button
               type="button"
               onClick={() => handleAddPlayer('main')}
-              disabled={loading || !playerName.trim() || isMainListFull}
+              disabled={loading || isMainListFull}
               className={`w-full py-4 px-4 rounded-xl font-medium transition-all flex items-center justify-between border-3 shadow-md hover:shadow-lg active:scale-[0.98] ${
                 isMainListFull 
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-300 shadow-none' 
@@ -298,7 +299,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
             <button
               type="button"
               onClick={() => handleAddPlayer('bench')}
-              disabled={loading || !playerName.trim() || isBenchListFull}
+              disabled={loading || isBenchListFull}
               className={`w-full py-4 px-4 rounded-xl font-medium transition-all flex items-center justify-between shadow-md hover:shadow-lg active:scale-[0.98] ${
                 isBenchListFull 
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-300 shadow-none' 
@@ -322,12 +323,6 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId 
             </button>
           </div>
 
-          {!playerName.trim() && (
-            <p className="text-gray-500 text-sm mt-3 text-center">
-              ☝️ Primero escribe tu nombre arriba
-            </p>
-          )}
-          
           {isMainListFull && isBenchListFull && (
             <p className="text-red-600 text-sm mt-3 text-center font-medium">
               ❌ Ambas listas están llenas. No es posible inscribirse.
