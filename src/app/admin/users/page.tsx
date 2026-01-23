@@ -33,7 +33,7 @@ export default async function UsersAdminPage() {
     .order('created_at', { ascending: false })
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-200">
       <Navbar />
       <UserManagement users={users || []} currentUserId={user.id} />
     </div>

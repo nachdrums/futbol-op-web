@@ -31,7 +31,7 @@ export default function CreateEventPage() {
 
   if (!isOrganizer) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-200">
         <Navbar />
         <main className="max-w-7xl mx-auto px-4 py-8">
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
@@ -122,7 +122,7 @@ export default function CreateEventPage() {
   const emptyDays = Array.from({ length: firstDay }, (_, i) => i)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-200">
       <Navbar />
       
       <main className="max-w-2xl mx-auto px-4 py-8">

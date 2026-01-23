@@ -155,18 +155,18 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
   }
 
   const PlayerCard = ({ player, isBench }: { player: Player; isBench: boolean }) => (
-    <div className={`flex items-center justify-between p-4 rounded-lg ${
-      isBench ? 'bg-orange-50' : 'bg-gray-50'
+    <div className={`flex items-center justify-between px-3 py-1 rounded-lg ${
+      isBench ? 'bg-orange-100' : 'bg-gray-200'
     }`}>
       <div className="flex items-center space-x-3">
         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
           isBench 
             ? 'bg-orange-100 text-orange-700' 
-            : 'bg-green-100 text-green-700'
+            : 'bg-green-200 text-green-800'
         }`}>
           {player.position}
         </span>
-        <span className="font-medium text-gray-800">{player.name}</span>
+        <span className="font-medium text-gray-900">{player.name}</span>
       </div>
       
       <div className="flex items-center space-x-3">
@@ -174,13 +174,13 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
           <>
             {/* Toggle Switch for Payment */}
             <div className="flex items-center space-x-2">
-              <span className={`text-xs font-medium ${player.has_paid ? 'text-green-600' : 'text-gray-400'}`}>
+              <span className={`text-xs font-medium ${player.has_paid ? 'text-green-600' : 'text-gray-500'}`}>
                 {player.has_paid ? 'Pagado' : 'Por Pagar'}
               </span>
               <button
                 onClick={() => handleTogglePayment(player.id, player.has_paid)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-                  player.has_paid ? 'bg-green-500' : 'bg-gray-300'
+                  player.has_paid ? 'bg-green-500' : 'bg-gray-400'
                 }`}
               >
                 <span
@@ -200,6 +200,16 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
         )}
         {!isOrganizer && player.has_paid && (
           <span className="text-green-500 text-sm font-medium">✓ Pagado</span>
+        )}
+        {/* Botón para que el jugador se quite a sí mismo */}
+        {!isOrganizer && player.user_id === userId && (
+          <button
+            onClick={() => handleRemovePlayer(player.id)}
+            className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-500 hover:text-white rounded-lg transition-all duration-200 font-medium text-sm border border-red-200 hover:border-red-500 hover:scale-105"
+            title="Quitarme de la lista"
+          >
+            ✕ Drop
+          </button>
         )}
       </div>
     </div>
@@ -259,7 +269,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
               <h2 className="font-semibold text-gray-800 mb-4">📝 Inscribirse al Evento</h2>
               
               {/* Profile Name Display */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="mb-4 p-3 bg-gray-200 rounded-lg">
                 <p className="text-sm text-gray-600">Te inscribirás como:</p>
                 <p className="font-semibold text-gray-800">{profileName}</p>
               </div>
@@ -340,7 +350,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
           <h2 className="font-semibold text-gray-800 mb-4">
             Lista Principal ({mainPlayers.length}/{MAX_MAIN_PLAYERS})
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-1">
             {mainPlayers.map((player) => (
               <PlayerCard key={player.id} player={player} isBench={false} />
             ))}
@@ -355,7 +365,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
           <h2 className="font-semibold text-gray-800 mb-4">
             Banca ({benchPlayers.length}/{MAX_BENCH_PLAYERS})
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-1">
             {benchPlayers.map((player) => (
               <PlayerCard key={player.id} player={player} isBench={true} />
             ))}

@@ -39,7 +39,7 @@ export default async function EventPage({ params }: PageProps) {
   const isOrganizer = profile?.role === 'organizer' || profile?.role === 'admin'
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-200">
       <Navbar />
       <EventDetails event={event} isOrganizer={isOrganizer} userId={user.id} profileName={profile?.full_name || ''} />
     </div>
