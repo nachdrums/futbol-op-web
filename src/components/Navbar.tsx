@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { profile, isAdmin, isOrganizer } = useAuth()
+  const { user, profile, loading, isAdmin, isOrganizer } = useAuth()
   const supabase = createClient()
 
   const handleSignOut = async () => {
@@ -78,7 +78,9 @@ export default function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center space-x-4">
-            {profile && (
+            {loading ? (
+              <span className="text-sm text-gray-400">Cargando...</span>
+            ) : user && profile ? (
               <>
                 <div className="flex items-center space-x-3">
                   {getRoleBadge()}
@@ -91,7 +93,9 @@ export default function Navbar() {
                   Cerrar sesión
                 </button>
               </>
-            )}
+            ) : user ? (
+              <span className="text-sm text-gray-400">Cargando perfil...</span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -99,7 +103,11 @@ export default function Navbar() {
       {/* Mobile menu */}
       <div className="md:hidden border-t">
         {/* User profile for mobile */}
-        {profile && (
+        {loading ? (
+          <div className="flex items-center justify-center px-4 py-3 bg-gray-50 border-b">
+            <span className="text-sm text-gray-400">Cargando...</span>
+          </div>
+        ) : user && profile ? (
           <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b">
             <div className="flex items-center space-x-2">
               <span className="text-xl">👤</span>
@@ -113,7 +121,7 @@ export default function Navbar() {
               Salir
             </button>
           </div>
-        )}
+        ) : null}
         <div className="flex justify-around py-2">
           {navItems.map((item) => (
             <Link

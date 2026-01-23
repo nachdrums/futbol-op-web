@@ -32,17 +32,20 @@ interface Props {
 const MAX_MAIN_PLAYERS = 14
 const MAX_BENCH_PLAYERS = 14
 
-export default function EventDetails({ event, isOrganizer, userId }: Props) {
+export default function EventDetails({ event: initialEvent, isOrganizer, userId }: Props) {
   const [playerName, setPlayerName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [players, setPlayers] = useState<Player[]>(initialEvent.players)
   const router = useRouter()
   const supabase = createClient()
 
-  const mainPlayers = event.players
+  const event = { ...initialEvent, players }
+
+  const mainPlayers = players
     .filter(p => !p.is_bench)
     .sort((a, b) => a.position - b.position)
   
-  const benchPlayers = event.players
+  const benchPlayers = players
     .filter(p => p.is_bench)
     .sort((a, b) => a.position - b.position)
 
@@ -95,18 +98,29 @@ export default function EventDetails({ event, isOrganizer, userId }: Props) {
   }
 
   const handleTogglePayment = async (playerId: string, currentStatus: boolean) => {
-    await supabase
+    // Actualización optimista - cambiar el estado inmediatamente
+    setPlayers(prev => prev.map(p => 
+      p.id === playerId ? { ...p, has_paid: !currentStatus } : p
+    ))
+
+    const { error } = await supabase
       .from('players')
       .update({ has_paid: !currentStatus })
       .eq('id', playerId)
     
-    router.refresh()
+    // Si hay error, revertir el cambio
+    if (error) {
+      setPlayers(prev => prev.map(p => 
+        p.id === playerId ? { ...p, has_paid: currentStatus } : p
+      ))
+    }
   }
 
   const handleRemovePlayer = async (playerId: string) => {
-    if (!confirm('Estas seguro de eliminar este jugador?')) return
-
-    const playerToRemove = event.players.find(p => p.id === playerId)
+    const playerToRemove = players.find(p => p.id === playerId)
+    
+    // Actualización optimista - remover inmediatamente
+    setPlayers(prev => prev.filter(p => p.id !== playerId))
     
     await supabase.from('players').delete().eq('id', playerId)
 
@@ -120,9 +134,14 @@ export default function EventDetails({ event, isOrganizer, userId }: Props) {
           position: mainPlayers.length 
         })
         .eq('id', firstBenchPlayer.id)
+      
+      // Actualizar estado local para la promoción
+      setPlayers(prev => prev.map(p => 
+        p.id === firstBenchPlayer.id 
+          ? { ...p, is_bench: false, position: mainPlayers.length }
+          : p
+      ))
     }
-
-    router.refresh()
   }
 
   const PlayerCard = ({ player, isBench }: { player: Player; isBench: boolean }) => (
