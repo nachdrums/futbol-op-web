@@ -140,6 +140,61 @@ create policy "Users can delete their own guests"
   on public.players for delete
   using (invited_by = auth.uid());
 
+-- Create match_pairings table to store historical team matchups
+create table public.match_pairings (
+  id uuid default uuid_generate_v4() primary key,
+  event_id uuid references public.events(id) on delete cascade not null,
+  player1_name text not null,
+  player2_name text not null,
+  team text not null check (team in ('A', 'B')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create match_teams table to store generated teams for events
+create table public.match_teams (
+  id uuid default uuid_generate_v4() primary key,
+  event_id uuid references public.events(id) on delete cascade not null unique,
+  team_a text[] not null,
+  team_b text[] not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Index for faster lookups
+create index idx_match_pairings_players on public.match_pairings(player1_name, player2_name);
+create index idx_match_teams_event on public.match_teams(event_id);
+
+-- Enable RLS
+alter table public.match_pairings enable row level security;
+alter table public.match_teams enable row level security;
+
+-- Policies for match_pairings
+create policy "Match pairings are viewable by everyone"
+  on public.match_pairings for select
+  using (true);
+
+create policy "Organizers can manage match pairings"
+  on public.match_pairings for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and role in ('admin', 'organizer')
+    )
+  );
+
+-- Policies for match_teams
+create policy "Match teams are viewable by everyone"
+  on public.match_teams for select
+  using (true);
+
+create policy "Organizers can manage match teams"
+  on public.match_teams for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and role in ('admin', 'organizer')
+    )
+  );
+
 -- Function to handle new user registration
 create or replace function public.handle_new_user()
 returns trigger as $$

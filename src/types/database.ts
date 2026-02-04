@@ -38,3 +38,17 @@ export interface EventWithPlayers extends GameEvent {
   bench_players: Player[]
   creator?: Profile
 }
+
+export interface MatchPairing {
+  id: string
+  event_id: string
+  player1_name: string
+  player2_name: string
+  team: 'A' | 'B'
+  created_at: string
+}
+
+export interface TeamMatchup {
+  teamA: string[]
+  teamB: string[]
+}

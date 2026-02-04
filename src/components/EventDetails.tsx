@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -24,6 +24,11 @@ interface Event {
   players: Player[]
 }
 
+interface MatchTeam {
+  team_a: string[]
+  team_b: string[]
+}
+
 interface Props {
   event: Event
   isOrganizer: boolean
@@ -40,10 +45,29 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
   const [guestName, setGuestName] = useState('')
   const [showGuestForm, setShowGuestForm] = useState(false)
   const [addingGuest, setAddingGuest] = useState(false)
+  const [generatedTeams, setGeneratedTeams] = useState<MatchTeam | null>(null)
+  const [generatingTeams, setGeneratingTeams] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   const event = { ...initialEvent, players }
+
+  // Cargar equipos existentes si ya fueron generados
+  const loadExistingTeams = useCallback(async () => {
+    const { data } = await supabase
+      .from('match_teams')
+      .select('team_a, team_b')
+      .eq('event_id', initialEvent.id)
+      .single()
+    
+    if (data) {
+      setGeneratedTeams(data)
+    }
+  }, [supabase, initialEvent.id])
+
+  useEffect(() => {
+    loadExistingTeams()
+  }, [loadExistingTeams])
 
   // Verificar si estamos a un día o menos del evento
   const eventDate = new Date(initialEvent.event_date)
@@ -258,6 +282,136 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
           : p
       ))
     }
+  }
+
+  // Función para generar equipos con matchmaking inteligente
+  const generateTeams = async () => {
+    if (mainPlayers.length < 14) {
+      alert('Se necesitan 14 jugadores en la lista principal para generar equipos')
+      return
+    }
+
+    setGeneratingTeams(true)
+
+    try {
+      // Obtener historial de emparejamientos anteriores
+      const { data: pairingsHistory } = await supabase
+        .from('match_pairings')
+        .select('player1_name, player2_name, team')
+
+      // Crear mapa de frecuencia de emparejamientos
+      const pairingCount: Record<string, number> = {}
+      
+      if (pairingsHistory) {
+        pairingsHistory.forEach(pairing => {
+          const key1 = `${pairing.player1_name}-${pairing.player2_name}-${pairing.team}`
+          const key2 = `${pairing.player2_name}-${pairing.player1_name}-${pairing.team}`
+          pairingCount[key1] = (pairingCount[key1] || 0) + 1
+          pairingCount[key2] = (pairingCount[key2] || 0) + 1
+        })
+      }
+
+      // Obtener los 14 jugadores principales
+      const playerNames = mainPlayers.slice(0, 14).map(p => p.name)
+      
+      // Algoritmo de matchmaking que minimiza repeticiones
+      let bestTeamA: string[] = []
+      let bestTeamB: string[] = []
+      let bestScore = Infinity
+
+      // Intentar múltiples combinaciones aleatorias y elegir la mejor
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const shuffled = [...playerNames].sort(() => Math.random() - 0.5)
+        const teamA = shuffled.slice(0, 7)
+        const teamB = shuffled.slice(7, 14)
+
+        // Calcular puntuación (menor es mejor - menos repeticiones)
+        let score = 0
+        
+        // Verificar emparejamientos dentro del equipo A
+        for (let i = 0; i < teamA.length; i++) {
+          for (let j = i + 1; j < teamA.length; j++) {
+            const key = `${teamA[i]}-${teamA[j]}-A`
+            score += pairingCount[key] || 0
+          }
+        }
+        
+        // Verificar emparejamientos dentro del equipo B
+        for (let i = 0; i < teamB.length; i++) {
+          for (let j = i + 1; j < teamB.length; j++) {
+            const key = `${teamB[i]}-${teamB[j]}-B`
+            score += pairingCount[key] || 0
+          }
+        }
+
+        if (score < bestScore) {
+          bestScore = score
+          bestTeamA = teamA
+          bestTeamB = teamB
+        }
+
+        // Si encontramos una combinación sin repeticiones, usarla
+        if (score === 0) break
+      }
+
+      // Guardar los equipos generados
+      await supabase
+        .from('match_teams')
+        .upsert({
+          event_id: event.id,
+          team_a: bestTeamA,
+          team_b: bestTeamB,
+        }, { onConflict: 'event_id' })
+
+      // Guardar los emparejamientos para el historial
+      const pairingsToInsert: { event_id: string; player1_name: string; player2_name: string; team: string }[] = []
+      
+      // Emparejamientos del equipo A
+      for (let i = 0; i < bestTeamA.length; i++) {
+        for (let j = i + 1; j < bestTeamA.length; j++) {
+          pairingsToInsert.push({
+            event_id: event.id,
+            player1_name: bestTeamA[i],
+            player2_name: bestTeamA[j],
+            team: 'A'
+          })
+        }
+      }
+      
+      // Emparejamientos del equipo B
+      for (let i = 0; i < bestTeamB.length; i++) {
+        for (let j = i + 1; j < bestTeamB.length; j++) {
+          pairingsToInsert.push({
+            event_id: event.id,
+            player1_name: bestTeamB[i],
+            player2_name: bestTeamB[j],
+            team: 'B'
+          })
+        }
+      }
+
+      await supabase.from('match_pairings').insert(pairingsToInsert)
+
+      setGeneratedTeams({ team_a: bestTeamA, team_b: bestTeamB })
+    } catch (error) {
+      console.error('Error generando equipos:', error)
+      alert('Error al generar equipos')
+    } finally {
+      setGeneratingTeams(false)
+    }
+  }
+
+  // Función para regenerar equipos
+  const regenerateTeams = async () => {
+    const confirmed = window.confirm('¿Regenerar equipos? Esto creará nuevos equipos y actualizará el historial.')
+    if (!confirmed) return
+
+    // Eliminar equipos y emparejamientos anteriores de este evento
+    await supabase.from('match_teams').delete().eq('event_id', event.id)
+    await supabase.from('match_pairings').delete().eq('event_id', event.id)
+    
+    setGeneratedTeams(null)
+    await generateTeams()
   }
 
   const PlayerCard = ({ player, isBench }: { player: Player; isBench: boolean }) => {
@@ -593,6 +747,102 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
           <p className="text-sm text-gray-500">Pendientes</p>
         </div>
       </div>
+
+      {/* Matchmaking Section - Solo visible cuando hay 14 jugadores */}
+      {mainPlayers.length >= 14 && (
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-800">⚔️ Versus - Equipos</h2>
+            {isOrganizer && (
+              <div className="flex space-x-2">
+                {!generatedTeams ? (
+                  <button
+                    onClick={generateTeams}
+                    disabled={generatingTeams}
+                    className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    {generatingTeams ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Generando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🎲</span>
+                        <span>Generar Equipos</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={regenerateTeams}
+                    disabled={generatingTeams}
+                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    <span>🔄</span>
+                    <span>Regenerar</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {generatedTeams ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Equipo A - Claro */}
+              <div className="bg-gradient-to-br from-white to-gray-100 rounded-2xl shadow-lg p-6 border-4 border-gray-300">
+                <div className="flex items-center justify-center space-x-3 mb-4">
+                  <span className="text-3xl">⚪</span>
+                  <h3 className="text-xl font-bold text-gray-800">Equipo A</h3>
+                  <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs font-medium">CLARO</span>
+                </div>
+                <div className="space-y-2">
+                  {generatedTeams.team_a.map((playerName, index) => (
+                    <div key={index} className="flex items-center space-x-3 bg-white rounded-lg px-4 py-2 shadow-sm">
+                      <span className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-700">
+                        {index + 1}
+                      </span>
+                      <span className="font-medium text-gray-800">{playerName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Equipo B - Oscuro */}
+              <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-lg p-6 border-4 border-gray-600">
+                <div className="flex items-center justify-center space-x-3 mb-4">
+                  <span className="text-3xl">⚫</span>
+                  <h3 className="text-xl font-bold text-white">Equipo B</h3>
+                  <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded-full text-xs font-medium">OSCURO</span>
+                </div>
+                <div className="space-y-2">
+                  {generatedTeams.team_b.map((playerName, index) => (
+                    <div key={index} className="flex items-center space-x-3 bg-gray-700 rounded-lg px-4 py-2 shadow-sm">
+                      <span className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">
+                        {index + 1}
+                      </span>
+                      <span className="font-medium text-white">{playerName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <div className="text-5xl mb-4">⚔️</div>
+              <p className="text-gray-600 mb-2">Los equipos aún no han sido generados</p>
+              {isOrganizer ? (
+                <p className="text-sm text-gray-500">Haz clic en &quot;Generar Equipos&quot; para crear el matchmaking</p>
+              ) : (
+                <p className="text-sm text-gray-500">El organizador generará los equipos próximamente</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </main>
   )
 }
