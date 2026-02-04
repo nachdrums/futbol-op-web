@@ -14,6 +14,8 @@ const withPWA = require("next-pwa")({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+  // Incluir el archivo de push notifications en el service worker
+  importScripts: ['/sw-push.js'],
 });
 
 export default withPWA(nextConfig);

@@ -96,17 +96,35 @@ export default function CreateEventPage() {
         .update({ is_active: false })
         .eq('is_active', true)
 
+      const eventTitle = formatEventTitle()
+
       // Create new event
-      const { error: insertError } = await supabase.from('events').insert({
-        title: formatEventTitle(),
+      const { data: newEvent, error: insertError } = await supabase.from('events').insert({
+        title: eventTitle,
         event_date: selectedDate.toISOString().split('T')[0],
         event_time: `${selectedHour}:${selectedMinute}`,
         is_open: true,
         is_active: true,
         created_by: user?.id,
-      })
+      }).select().single()
 
       if (insertError) throw insertError
+
+      // Enviar notificación push a todos los suscriptores
+      try {
+        await fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: '⚽ Nuevo Evento Creado',
+            body: eventTitle,
+            url: newEvent ? `/events/${newEvent.id}` : '/'
+          })
+        })
+      } catch (pushError) {
+        // No bloquear si falla el envío de notificaciones
+        console.error('Error sending push notifications:', pushError)
+      }
 
       router.push('/')
       router.refresh()

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { createClient } from '@/lib/supabase/client'
+import NotificationButton from './NotificationButton'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -82,6 +83,7 @@ export default function Navbar() {
               <span className="text-sm text-gray-400">Cargando...</span>
             ) : user && profile ? (
               <>
+                <NotificationButton />
                 <div className="flex items-center space-x-3">
                   {getRoleBadge()}
                   <span className="text-sm text-gray-600">{profile.full_name}</span>
@@ -114,12 +116,15 @@ export default function Navbar() {
               <span className="text-sm font-medium text-gray-800">{profile.full_name}</span>
               {getRoleBadge()}
             </div>
-            <button
-              onClick={handleSignOut}
-              className="text-red-600 hover:text-red-800 text-sm font-medium"
-            >
-              Salir
-            </button>
+            <div className="flex items-center space-x-2">
+              <NotificationButton />
+              <button
+                onClick={handleSignOut}
+                className="text-red-600 hover:text-red-800 text-sm font-medium"
+              >
+                Salir
+              </button>
+            </div>
           </div>
         ) : null}
         <div className="flex justify-around py-2">
