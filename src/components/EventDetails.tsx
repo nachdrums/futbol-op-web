@@ -11,6 +11,7 @@ interface Player {
   is_bench: boolean
   position: number
   user_id: string | null
+  invited_by: string | null
 }
 
 interface Event {
@@ -36,10 +37,26 @@ const MAX_BENCH_PLAYERS = 14
 export default function EventDetails({ event: initialEvent, isOrganizer, userId, profileName }: Props) {
   const [loading, setLoading] = useState(false)
   const [players, setPlayers] = useState<Player[]>(initialEvent.players)
+  const [guestName, setGuestName] = useState('')
+  const [showGuestForm, setShowGuestForm] = useState(false)
+  const [addingGuest, setAddingGuest] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   const event = { ...initialEvent, players }
+
+  // Verificar si estamos a un día o menos del evento
+  const eventDate = new Date(initialEvent.event_date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  eventDate.setHours(0, 0, 0, 0)
+  const diffTime = eventDate.getTime() - today.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  const canAddGuest = diffDays <= 1 && diffDays >= 0 && event.is_open
+
+  // Verificar si el usuario ya tiene un invitado
+  const userGuest = players.find(p => p.invited_by === userId)
+  const hasGuest = !!userGuest
 
   const mainPlayers = players
     .filter(p => !p.is_bench)
@@ -90,6 +107,7 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
       has_paid: false,
       is_bench: isBench,
       position: position,
+      invited_by: null,
     }).select().single()
 
     if (error) {
@@ -126,6 +144,94 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
     }
   }
 
+  const handleAddGuest = async (listType: 'main' | 'bench') => {
+    if (!guestName.trim()) {
+      alert('Por favor ingresa el nombre del invitado')
+      return
+    }
+
+    setAddingGuest(true)
+
+    let isBench = listType === 'bench'
+    let position: number
+
+    if (listType === 'main' && isMainListFull) {
+      if (isBenchListFull) {
+        alert('Ambas listas están llenas')
+        setAddingGuest(false)
+        return
+      }
+      isBench = true
+      position = benchPlayers.length + 1
+    } else if (listType === 'bench' && isBenchListFull) {
+      alert('La banca está llena')
+      setAddingGuest(false)
+      return
+    } else {
+      position = isBench ? benchPlayers.length + 1 : mainPlayers.length + 1
+    }
+
+    const { data, error } = await supabase.from('players').insert({
+      event_id: event.id,
+      user_id: null,
+      name: guestName.trim(),
+      has_paid: false,
+      is_bench: isBench,
+      position: position,
+      invited_by: userId,
+    }).select().single()
+
+    if (error) {
+      console.error('Error al agregar invitado:', error)
+      alert('Error al agregar invitado: ' + error.message)
+      setAddingGuest(false)
+      return
+    }
+
+    if (data) {
+      setPlayers(prev => [...prev, data])
+    }
+
+    setGuestName('')
+    setShowGuestForm(false)
+    setAddingGuest(false)
+  }
+
+  const handleRemoveGuest = async (playerId: string) => {
+    const playerToRemove = players.find(p => p.id === playerId)
+    
+    // Verificar que el usuario puede eliminar este invitado
+    if (!isOrganizer && playerToRemove?.invited_by !== userId) {
+      alert('No puedes eliminar este jugador')
+      return
+    }
+
+    const confirmed = window.confirm('¿Estás seguro de que deseas eliminar a este invitado?')
+    if (!confirmed) return
+
+    setPlayers(prev => prev.filter(p => p.id !== playerId))
+    
+    await supabase.from('players').delete().eq('id', playerId)
+
+    // Promover jugador de banca si es necesario
+    if (!playerToRemove?.is_bench && benchPlayers.length > 0) {
+      const firstBenchPlayer = benchPlayers[0]
+      await supabase
+        .from('players')
+        .update({ 
+          is_bench: false, 
+          position: mainPlayers.length 
+        })
+        .eq('id', firstBenchPlayer.id)
+      
+      setPlayers(prev => prev.map(p => 
+        p.id === firstBenchPlayer.id 
+          ? { ...p, is_bench: false, position: mainPlayers.length }
+          : p
+      ))
+    }
+  }
+
   const handleRemovePlayer = async (playerId: string) => {
     const playerToRemove = players.find(p => p.id === playerId)
     
@@ -154,66 +260,89 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
     }
   }
 
-  const PlayerCard = ({ player, isBench }: { player: Player; isBench: boolean }) => (
-    <div className={`flex items-center justify-between px-3 py-1 rounded-lg ${
-      isBench ? 'bg-orange-100' : 'bg-gray-200'
-    }`}>
-      <div className="flex items-center space-x-3">
-        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-          isBench 
-            ? 'bg-orange-100 text-orange-700' 
-            : 'bg-green-200 text-green-800'
-        }`}>
-          {player.position}
-        </span>
-        <span className="font-medium text-gray-900">{player.name}</span>
-      </div>
-      
-      <div className="flex items-center space-x-3">
-        {isOrganizer && (
-          <>
-            {/* Toggle Switch for Payment */}
-            <div className="flex items-center space-x-2">
-              <span className={`text-xs font-medium ${player.has_paid ? 'text-green-600' : 'text-gray-500'}`}>
-                {player.has_paid ? 'Pagado' : 'Por Pagar'}
+  const PlayerCard = ({ player, isBench }: { player: Player; isBench: boolean }) => {
+    const isGuest = player.invited_by !== null
+    const isMyGuest = player.invited_by === userId
+    const canRemoveGuest = isOrganizer || isMyGuest
+
+    return (
+      <div className={`flex items-center justify-between px-3 py-1 rounded-lg ${
+        isBench ? 'bg-orange-100' : 'bg-gray-200'
+      }`}>
+        <div className="flex items-center space-x-3">
+          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+            isBench 
+              ? 'bg-orange-100 text-orange-700' 
+              : 'bg-green-200 text-green-800'
+          }`}>
+            {player.position}
+          </span>
+          <div className="flex items-center space-x-2">
+            <span className="font-medium text-gray-900">{player.name}</span>
+            {isGuest && (
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                👤 Invitado
               </span>
-              <button
-                onClick={() => handleTogglePayment(player.id, player.has_paid)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-                  player.has_paid ? 'bg-green-500' : 'bg-gray-400'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-md ${
-                    player.has_paid ? 'translate-x-6' : 'translate-x-1'
+            )}
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          {isOrganizer && (
+            <>
+              {/* Toggle Switch for Payment */}
+              <div className="flex items-center space-x-2">
+                <span className={`text-xs font-medium ${player.has_paid ? 'text-green-600' : 'text-gray-500'}`}>
+                  {player.has_paid ? 'Pagado' : 'Por Pagar'}
+                </span>
+                <button
+                  onClick={() => handleTogglePayment(player.id, player.has_paid)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                    player.has_paid ? 'bg-green-500' : 'bg-gray-400'
                   }`}
-                />
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-md ${
+                      player.has_paid ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <button
+                onClick={() => isGuest ? handleRemoveGuest(player.id) : handleRemovePlayer(player.id)}
+                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+              >
+                X
               </button>
-            </div>
+            </>
+          )}
+          {!isOrganizer && player.has_paid && (
+            <span className="text-green-500 text-sm font-medium">✓ Pagado</span>
+          )}
+          {/* Botón para que el jugador se quite a sí mismo */}
+          {!isOrganizer && player.user_id === userId && !isGuest && (
             <button
               onClick={() => handleRemovePlayer(player.id)}
-              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+              className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-500 hover:text-white rounded-lg transition-all duration-200 font-medium text-sm border border-red-200 hover:border-red-500 hover:scale-105"
+              title="Quitarme de la lista"
             >
-              X
+              ✕ Drop
             </button>
-          </>
-        )}
-        {!isOrganizer && player.has_paid && (
-          <span className="text-green-500 text-sm font-medium">✓ Pagado</span>
-        )}
-        {/* Botón para que el jugador se quite a sí mismo */}
-        {!isOrganizer && player.user_id === userId && (
-          <button
-            onClick={() => handleRemovePlayer(player.id)}
-            className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-500 hover:text-white rounded-lg transition-all duration-200 font-medium text-sm border border-red-200 hover:border-red-500 hover:scale-105"
-            title="Quitarme de la lista"
-          >
-            ✕ Drop
-          </button>
-        )}
+          )}
+          {/* Botón para eliminar invitado propio */}
+          {!isOrganizer && isMyGuest && (
+            <button
+              onClick={() => handleRemoveGuest(player.id)}
+              className="px-3 py-2 text-purple-600 bg-purple-50 hover:bg-purple-500 hover:text-white rounded-lg transition-all duration-200 font-medium text-sm border border-purple-200 hover:border-purple-500 hover:scale-105"
+              title="Eliminar invitado"
+            >
+              ✕ Quitar
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-8">
@@ -262,6 +391,75 @@ export default function EventDetails({ event: initialEvent, isOrganizer, userId,
               <p className="text-sm text-gray-500">
                 Posición: #{userRegistration?.position}
               </p>
+
+              {/* Sección para agregar invitado */}
+              {canAddGuest && !hasGuest && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  {!showGuestForm ? (
+                    <button
+                      onClick={() => setShowGuestForm(true)}
+                      className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors flex items-center space-x-2 mx-auto"
+                    >
+                      <span>👤</span>
+                      <span>Agregar un invitado</span>
+                    </button>
+                  ) : (
+                    <div className="max-w-md mx-auto">
+                      <h3 className="font-semibold text-gray-800 mb-3">👤 Agregar Jugador Invitado</h3>
+                      <input
+                        type="text"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder="Nombre del invitado"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3 text-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleAddGuest('main')}
+                          disabled={addingGuest || isMainListFull}
+                          className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+                        >
+                          {isMainListFull ? 'Lista llena' : 'A Lista Principal'}
+                        </button>
+                        <button
+                          onClick={() => handleAddGuest('bench')}
+                          disabled={addingGuest || isBenchListFull}
+                          className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+                        >
+                          {isBenchListFull ? 'Banca llena' : 'A Banca'}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowGuestForm(false)
+                          setGuestName('')
+                        }}
+                        className="mt-2 text-gray-500 hover:text-gray-700 text-sm"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mostrar info si ya tiene invitado */}
+              {hasGuest && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <p className="text-purple-600 font-medium">
+                    👤 Ya tienes un invitado: <span className="font-bold">{userGuest?.name}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Mostrar mensaje si no puede agregar invitado */}
+              {!canAddGuest && !hasGuest && event.is_open && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <p className="text-gray-500 text-sm">
+                    💡 Podrás agregar un invitado un día antes del evento
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             // User can register

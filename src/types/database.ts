@@ -30,6 +30,7 @@ export interface Player {
   is_bench: boolean
   position: number
   registered_at: string
+  invited_by: string | null
 }
 
 export interface EventWithPlayers extends GameEvent {

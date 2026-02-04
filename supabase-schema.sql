@@ -36,7 +36,8 @@ create table public.players (
   has_paid boolean default false,
   is_bench boolean default false,
   position integer not null,
-  registered_at timestamp with time zone default timezone('utc'::text, now()) not null
+  registered_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  invited_by uuid references public.profiles(id) on delete set null
 );
 
 -- Create indexes
@@ -71,6 +72,17 @@ create policy "Admins can update all profiles"
       select 1 from public.profiles
       where id = auth.uid() and role = 'admin'
     )
+  );
+
+-- Allow admins to delete any profile (except their own)
+create policy "Admins can delete profiles"
+  on public.profiles for delete
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = auth.uid() and role = 'admin'
+    )
+    and id != auth.uid()
   );
 
 -- Events policies
@@ -122,6 +134,11 @@ create policy "Organizers can delete players"
       where id = auth.uid() and role in ('admin', 'organizer')
     )
   );
+
+-- Users can delete players they invited
+create policy "Users can delete their own guests"
+  on public.players for delete
+  using (invited_by = auth.uid());
 
 -- Function to handle new user registration
 create or replace function public.handle_new_user()
