@@ -12,6 +12,7 @@ interface Props {
 
 export default function UserManagement({ users, currentUserId }: Props) {
   const [loading, setLoading] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -30,6 +31,39 @@ export default function UserManagement({ users, currentUserId }: Props) {
 
     setLoading(null)
     router.refresh()
+  }
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (userId === currentUserId) {
+      alert('No puedes eliminarte a ti mismo')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `¿Estás seguro de que deseas eliminar al usuario "${userName}"? Esta acción no se puede deshacer.`
+    )
+
+    if (!confirmed) return
+
+    setDeleting(userId)
+
+    try {
+      // Eliminar el perfil del usuario
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId)
+
+      if (error) {
+        alert('Error al eliminar el usuario: ' + error.message)
+      } else {
+        router.refresh()
+      }
+    } catch {
+      alert('Error al eliminar el usuario')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const getRoleBadge = (role: UserRole) => {
@@ -68,6 +102,7 @@ export default function UserManagement({ users, currentUserId }: Props) {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Email</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Rol Actual</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Cambiar Rol</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -102,6 +137,34 @@ export default function UserManagement({ users, currentUserId }: Props) {
                         <option value="organizer">Organizador</option>
                         <option value="admin">Administrador</option>
                       </select>
+                    ) : (
+                      <span className="text-gray-400 text-sm">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.id !== currentUserId ? (
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.full_name)}
+                        disabled={deleting === user.id}
+                        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+                      >
+                        {deleting === user.id ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Eliminando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Eliminar</span>
+                          </>
+                        )}
+                      </button>
                     ) : (
                       <span className="text-gray-400 text-sm">-</span>
                     )}
