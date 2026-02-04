@@ -13,12 +13,8 @@ export default function NotificationButton() {
     unsubscribe 
   } = usePushNotifications()
 
-  // No mostrar si no está soportado
-  if (!isSupported) {
-    return null
-  }
-
   const handleClick = async () => {
+    console.log('NotificationButton clicked', { isSupported, isSubscribed, permission })
     if (isSubscribed) {
       await unsubscribe()
     } else {
@@ -35,7 +31,21 @@ export default function NotificationButton() {
         title="Las notificaciones están bloqueadas en tu navegador"
       >
         <span className="text-lg">🔕</span>
-        <span className="hidden sm:inline">Notificaciones bloqueadas</span>
+        <span className="hidden sm:inline">Bloqueadas</span>
+      </button>
+    )
+  }
+
+  // Mostrar botón deshabilitado si no está soportado
+  if (!isSupported) {
+    return (
+      <button
+        disabled
+        className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
+        title="Las notificaciones push no están disponibles"
+      >
+        <span className="text-lg">🔕</span>
+        <span className="hidden sm:inline">No disponible</span>
       </button>
     )
   }
@@ -57,14 +67,14 @@ export default function NotificationButton() {
           {loading 
             ? 'Procesando...' 
             : isSubscribed 
-              ? 'Notificaciones activas' 
-              : 'Activar notificaciones'
+              ? 'Activas' 
+              : 'Activar'
           }
         </span>
       </button>
       
       {error && (
-        <div className="absolute top-full mt-2 right-0 bg-red-50 text-red-600 text-xs p-2 rounded shadow-lg whitespace-nowrap">
+        <div className="absolute top-full mt-2 right-0 bg-red-50 text-red-600 text-xs p-2 rounded shadow-lg whitespace-nowrap z-50">
           {error}
         </div>
       )}

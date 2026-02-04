@@ -28,17 +28,36 @@ export function usePushNotifications() {
 
   // Verificar soporte y estado actual
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
-      setIsSupported(true)
-      setPermission(Notification.permission)
+    const checkSupport = async () => {
+      if (typeof window === 'undefined') return
       
-      // Verificar si ya está suscrito
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.pushManager.getSubscription().then((subscription) => {
+      const hasServiceWorker = 'serviceWorker' in navigator
+      const hasPushManager = 'PushManager' in window
+      const hasNotification = 'Notification' in window
+      const hasVapidKey = !!VAPID_PUBLIC_KEY
+      
+      console.log('Push Support Check:', { hasServiceWorker, hasPushManager, hasNotification, hasVapidKey })
+      
+      if (hasServiceWorker && hasPushManager && hasNotification && hasVapidKey) {
+        setIsSupported(true)
+        setPermission(Notification.permission)
+        
+        try {
+          // Verificar si ya está suscrito
+          const registration = await navigator.serviceWorker.ready
+          const subscription = await registration.pushManager.getSubscription()
           setIsSubscribed(!!subscription)
-        })
-      })
+          console.log('Current subscription:', subscription ? 'Active' : 'None')
+        } catch (err) {
+          console.error('Error checking subscription:', err)
+        }
+      } else {
+        console.log('Push notifications not fully supported')
+        setIsSupported(false)
+      }
     }
+    
+    checkSupport()
   }, [])
 
   // Suscribirse a notificaciones push

@@ -3,19 +3,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import webpush from 'web-push'
 
 // Configurar VAPID keys desde variables de entorno
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:futbolop@example.com'
 
-webpush.setVapidDetails(
-  VAPID_SUBJECT,
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-)
+// Solo configurar si las claves están disponibles
+let vapidConfigured = false
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(
+      VAPID_SUBJECT,
+      VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY
+    )
+    vapidConfigured = true
+  } catch (error) {
+    console.error('Error configuring VAPID:', error)
+  }
+}
 
 // POST - Enviar notificación push a todos los suscriptores
 export async function POST(request: NextRequest) {
   try {
+    // Verificar que VAPID esté configurado
+    if (!vapidConfigured) {
+      return NextResponse.json({ 
+        error: 'Push notifications not configured', 
+        message: 'VAPID keys are missing' 
+      }, { status: 503 })
+    }
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 

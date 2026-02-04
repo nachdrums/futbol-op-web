@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import IOSInstallPrompt from "@/components/IOSInstallPrompt";
+import AutoPushSubscriber from "@/components/AutoPushSubscriber";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <IOSInstallPrompt />
+          <AutoPushSubscriber />
         </AuthProvider>
       </body>
     </html>
