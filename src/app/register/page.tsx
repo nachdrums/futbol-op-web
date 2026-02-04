@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -12,8 +12,21 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [countdown, setCountdown] = useState(3)
   const router = useRouter()
   const supabase = createClient()
+
+  // Countdown y redirección después del registro exitoso
+  useEffect(() => {
+    if (success && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
+      return () => clearTimeout(timer)
+    } else if (success && countdown === 0) {
+      router.push('/')
+      router.refresh()
+    }
+  }, [success, countdown, router])
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,9 +74,47 @@ export default function RegisterPage() {
         console.error('Error creating profile:', profileError)
       }
 
-      router.push('/')
-      router.refresh()
+      // Mostrar mensaje de éxito
+      setLoading(false)
+      setSuccess(true)
     }
+  }
+
+  // Pantalla de éxito
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 to-green-600 p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <div className="text-center">
+              <div className="text-6xl mb-4">✅</div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-4">¡Registro Exitoso!</h1>
+              <p className="text-gray-600 mb-2">
+                Bienvenido a <span className="font-semibold text-green-600">Futbol OP</span>
+              </p>
+              <p className="text-gray-500 mb-6">
+                Tu cuenta ha sido creada correctamente.
+              </p>
+              <div className="bg-green-50 rounded-lg p-4 mb-6">
+                <p className="text-green-700">
+                  Serás redirigido a la página principal en{' '}
+                  <span className="font-bold text-2xl">{countdown}</span> segundos...
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  router.push('/')
+                  router.refresh()
+                }}
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition"
+              >
+                Ir ahora →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
